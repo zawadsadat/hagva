@@ -1,149 +1,194 @@
-# HAGVA — Hallucination-Aware Generative View Augmentation
+# Hallucination-Aware Multi-View Fusion with Foundation
+Models: Robust Learning from Low-Quality Synthetic Views
 
-Code and precomputed scores for studying why diffusion-synthesized novel views
-degrade Visual Place Recognition (VPR), and for filtering the harmful ones
-before injection.
+Research code for *Hallucination-Aware Multi-View Fusion with Foundation
+Models: Robust Learning from Low-Quality Synthetic Views*.
 
-Synthesized views are scored per-pixel by two training-free signals — geometric
-consistency derived from GenWarp's own warp and visibility outputs, and semantic
-drift measured with DINOv2 patch features. Views whose mean combined score
-exceeds a threshold are rejected; the rest are injected into the VPR query set.
+HAGVA studies how diffusion-generated novel views affect visual place
+recognition (VPR). It ranks synthetic views by **DINOv2 patch-level semantic
+drift** relative to their source images and admits the lowest-scoring views
+at a fixed budget. Selected views augment the **query set**, alongside the
+original real queries. The ranking is training-free and does not use retrieval
+AUC or place labels to choose its cutoff.
 
-View synthesis itself builds on
-[zawadsadat/nvs-vpr-eval](https://github.com/zawadsadat/nvs-vpr-eval) and its
-accompanying preprint.
+The main budgets are **20, 64 and 145 views out of 400 candidates**.
+Geometric consistency and semantic–geometric fusion are comparative
+ablations. View generation uses GenWarp and ZoeDepth, following the workflow
+in [nvs-vpr-eval](https://github.com/zawadsadat/nvs-vpr-eval).
 
----
+## Experiments
+
+Evaluation covers **GardensPoint, SFU and StLucia**, with **PatchNetVLAD** and
+**EigenPlaces** descriptors. Each dataset has 400 candidate views in each of
+two viewpoint regimes:
+
+| Regime | Azimuth (degrees) | Elevation choices (degrees) | Radius parameter choices |
+|---|---:|---|---|
+| Narrow (`low`) | 0 | 1, 2, 3, 4, 5 | 0.10, 0.15, 0.20 |
+| Wide | 0 | 8, 12, 16 | 0.30, 0.40, 0.50 |
+
+The name `low` in scripts and filenames refers to the narrow regime.
+Radius denotes the generation code's camera-radius parameter.
+
+The experiment groups are:
+
+| Group | Scope |
+|---|---|
+| Phase 1, including 1b/1c | Narrow-pool PatchNetVLAD selection, IQA and fusion comparisons, including corrected geometry |
+| Phase 2 | Pose-matched causal controls, auxiliary NetVLAD controls, mask/geometry diagnostics and stratified analysis |
+| Phase 3a | Narrow-pool EigenPlaces selection and causal controls; descriptor baselines |
+| Phase 3b | Wide-pool selection and causal controls for all three datasets and both descriptors |
 
 ## Results
 
-400 synthesized views per dataset, PatchNetVLAD descriptor. Recovery is
-`(HAGVA − Naive) / (Baseline − Naive)`.
+AUC at **64 accepted views** is shown below. Baseline uses no synthetic
+injection; naive injects all 400 candidates. Random is the mean of five seeded
+selections. Semantic and random selections in this table have exactly 64
+accepted views.
 
-| Dataset | Baseline | Naive | HAGVA | τ | Views accepted | Recovery |
-|---|---|---|---|---|---|---|
-| GardensPoint | 0.802 | 0.755 | 0.792 | 0.42 | 64 | 78.7% |
-| SFU | 0.729 | 0.651 | 0.743 | 0.44 | 71 | 117.9% |
-| StLucia | 0.594 | 0.448 | 0.599 | 0.36 | 20 | 103.4% |
+| Dataset | Descriptor | Baseline | Narrow naive | Narrow semantic | Narrow random | Wide naive | Wide semantic | Wide random |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| GardensPoint | PatchNetVLAD | 0.802 | 0.755 | 0.807 | 0.7830 | 0.707 | 0.805 | 0.7624 |
+| SFU | PatchNetVLAD | 0.729 | 0.651 | 0.737 | 0.7044 | 0.624 | 0.742 | 0.6948 |
+| StLucia | PatchNetVLAD | 0.594 | 0.448 | 0.589 | 0.5508 | 0.421 | 0.558 | 0.5352 |
+| GardensPoint | EigenPlaces | 0.675 | 0.594 | 0.652 | 0.6432 | 0.550 | 0.654 | 0.6262 |
+| SFU | EigenPlaces | 0.746 | 0.465 | 0.689 | 0.6668 | 0.456 | 0.687 | 0.6642 |
+| StLucia | EigenPlaces | 0.736 | 0.579 | 0.724 | 0.6728 | 0.581 | 0.688 | 0.6746 |
 
-SFU and StLucia exceed the no-injection baseline, i.e. filtered injection
-provides a net retrieval benefit rather than only avoiding harm.
+At wide-viewpoint budgets of 64 and 145, semantic selection exceeds the
+five-seed random mean in all **12 dataset–descriptor–budget comparisons**.
+These are comparisons of observed means, not a blanket significance claim.
+Selected synthetic views do not consistently exceed the real-query baseline.
 
-All reported numbers, including the signal and descriptor ablations, are in
-[`results/RESULTS.md`](results/RESULTS.md).
+The recorded drivers convert each requested budget into a strict score
+cutoff. Boundary ties cause 12 main-comparison rows to accept one fewer view
+than requested. Use `n_passed` as the actual count and `n_requested` as the
+nominal budget. The [reproduction guide](docs/PHASE_REPRODUCTION.md#selection-counts)
+lists the affected settings.
 
-**Threshold caveat.** The operating points above come from sweeping τ on each
-evaluation dataset, which is selection on the test data. Several selection
-rules requiring no access to retrieval performance were tried — fixed absolute
-threshold, fixed acceptance rate, and a distribution-derived cutoff — and none
-transferred cleanly across datasets. See `ablation/threshold_rule_*.py`.
+The primary result tables are:
 
----
+- [Phase 1 gates](phase1/phase1_results.csv).
+- [Phase 2 causal controls](phase2/phase2_results.csv).
+- [Phase 3a gates](phase3a/phase3a_gate_results.csv) and [causal controls](phase3a/phase3a_causal_results.csv).
+- [Phase 3b gates](phase3b/phase3b_gate_results.csv) and [causal controls](phase3b/phase3b_causal_results.csv).
 
-## Repository layout
+## Causal controls
 
+The controls use five seeded draws of 50 candidate views per dataset. Each
+draw fixes source identities; synthetic and warp variants use the recorded
+target poses.
+
+| Condition | Injected images |
+|---|---|
+| C0 | No injection |
+| C1 | GenWarp synthetic views |
+| C2 | Corresponding real source images |
+| C2b | Different-traverse real views, GardensPoint only |
+| C4 / C5 | Warp-only views with black / Telea-filled holes |
+| C6 / C7 | Generated views with black / matched Telea-filled holes |
+
+`C2 − C1` compares generation with matched source reinjection. `C7 − C5`
+compares visible-region content under matched hole fill, and `C7 − C1` tests
+replacing the hole content. C5/C7 share their hole fill before separate JPEG
+encoding; decoded hole pixels need not be identical. Effects depend on
+dataset, descriptor and viewpoint regime. Synthetic queries inherit source
+place labels rather than independently annotated target-view labels.
+
+## Repository structure
+
+```text
+view_synthesis/   GenWarp + ZoeDepth generation notebook
+module_a/scores/  Original 400-view scores and source/synthetic mappings
+phase1/          Narrow PatchNetVLAD studies and extended scores
+phase2/          Causal controls, draws, manifests and geometry diagnostics
+phase3a/         Narrow EigenPlaces studies and descriptor baselines
+phase3b/         Wide scores, selection studies and causal controls
+patches/         VPR framework demo and dataset loader
+tools/           Workspace preparation, data verification and GT diagnostics
+docs/            Reproduction guide, setup notes and experiment checksums
 ```
-view_synthesis/   GenWarp + ZoeDepth view generation (run first)
-module_a/         Signal 1 + Signal 2 scoring notebook
-module_a/scores/  precomputed per-view scores for all datasets
-gate/             400-view threshold sweep, one script per dataset
-exp5/             per-image single-view injection correlation
-ablation/         signal ablation, NetVLAD ablation, threshold-rule studies
-patches/          modified demo.py and load_dataset.py — required
-tools/            gt_audit.py, figure generation
-results/          RESULTS.md
-docs/             SETUP_NOTES.md — read before modifying injection code
-```
 
----
+Recorded result CSVs, raw gate CSVs, precomputed scores, seeded draws and
+variant manifests are included. Dataset images, generated image pools,
+intervention images, model weights, virtual environments and per-run
+similarity matrices are supplied separately. Paths inside recorded provenance
+and variant manifests identify their original experiment locations.
 
-## Reproducing the results
+## Requirements
 
-The precomputed scores in `module_a/scores/` mean you do **not** need GenWarp,
-ZoeDepth, DINOv2, or a GPU to reproduce any gate, ablation, or Exp 5 number.
-You need the VPR framework, the three datasets, and PatchNetVLAD.
+- GardensPoint, SFU Mountain and StLucia_small, with the source mappings and
+  ground-truth files described in [the reproduction guide](docs/PHASE_REPRODUCTION.md).
+- The [VPR_Tutorial framework](https://github.com/stschubert/VPR_Tutorial), with
+  this repository's `patches/demo.py` and `patches/load_dataset.py` applied.
+- PatchNetVLAD and EigenPlaces implementations and descriptor weights;
+  full Phase 2 reproduction also uses NetVLAD.
+- Python with NumPy, SciPy, Matplotlib, Pillow, PyTorch and the framework's
+  descriptor dependencies.
+- For rescoring: torchvision and DINOv2 ViT-S/14. IQA comparisons use `pyiqa`;
+  intervention preprocessing uses OpenCV.
+- For view generation: the GenWarp/ZoeDepth environment and model checkpoints.
 
-**1. Framework.** Clone
-[VPR_Tutorial](https://github.com/stschubert/VPR_Tutorial) and replace
-`demo.py` and `datasets/load_dataset.py` with the versions in `patches/`.
-The stock files will not work: they lack the `--images_dir` override and the
-ground-truth extension logic that injected views require.
+Recorded scoring provenance reports PyTorch 2.6.0, NumPy 1.26.4 and pyiqa
+0.1.15.post2. DINOv2 is pinned in the scripts to commit
+`85a24602099d397264d5b30461ad7f3bfd726ca1`. These records are not a complete
+environment lockfile; use the framework's installation instructions and
+verify compatibility with the selected descriptor.
 
-**2. Datasets.** GardensPoint Walking, SFU Mountain, and StLucia (small).
-Query folders must contain only the original images — see the hygiene note
-below.
+## Getting started
 
-**3. Environment.** `patchnetvlad`, `torch`, `numpy`, `scipy`, `matplotlib`.
-DINOv2 loads via `torch.hub` and is only needed to regenerate scores.
-
-**4. Paths.** Every script has an absolute-path config block at the top
-pointing at the original machine. Edit these before running.
-
-**5. Run.** For example:
+Verify the recorded scripts and data without loading models or running VPR:
 
 ```bash
-HAGVA_THRESHOLDS="0.30,0.32,0.34,0.36,0.38,0.40,0.42,0.44,0.46,0.48,0.50" \
-  python3 gate/gate_gardenspoint.py
+python3 tools/verify_phase_snapshot.py
 ```
 
-Scripts accept `HAGVA_THRESHOLDS` (comma-separated) and, where relevant,
-`HAGVA_SCORE_COL` (`mean_geo_score`, `mean_sem_score`, or
-`mean_combined_score`).
-
----
-
-## Ground truth for injected views — read this
-
-Injecting a synthetic view into a VPR query set requires two things, and
-getting either wrong produces plausible but wrong AUC values:
-
-1. **Filename sort order.** The injected file must sort *after* every original
-   query. A file named `01_Image001_....jpg` sorts before `Image000.jpg` and
-   shifts the entire query set against an identity ground-truth matrix.
-2. **A ground-truth column.** The injected view needs the ground truth of its
-   source image. A column left all-zero makes the view an unmatchable query,
-   which lowers AUC for reasons unrelated to hallucination.
-
-Three mechanisms are used here, one per dataset, because the loaders differ:
-
-| Dataset | Mechanism | Injected filename |
-|---|---|---|
-| GardensPoint | runtime patch adding `extra_query_gt[idx] = ref` | `Image200.jpg` … |
-| SFU | runtime patch adding `copy_from['<inj>'] = '<src>'` | `z_hagva_tmp_*` |
-| StLucia | explicit GT matrix extension written to staging | `zzz_inject_NNNN.jpg` |
-
-The StLucia approach is the only one that does not rewrite framework source at
-runtime, and is the pattern to prefer.
-
-**`tools/gt_audit.py`** verifies that a staged, injected dataset has complete
-ground truth:
+The experiment scripts retain the paths used for the recorded runs. Prepare
+a separate working directory with paths for your machine:
 
 ```bash
-python3 tools/gt_audit.py <framework_dir> StLuciaDataset <staging_images_dir>
+python3 tools/prepare_phase_workspace.py \
+  --workspace /scratch/hagva_run \
+  --data-root /data/genwarp \
+  --render-root /data/genwarp_regenerated \
+  --framework /scratch/VPR_Tutorial_hagva \
+  --vpr-python /opt/envs/vpr/bin/python3 \
+  --iqa-python /opt/envs/iqa/bin/python3
 ```
 
-Compare the all-zero column count against the *original* GT, not against zero —
-StLucia legitimately has 35 empty columns before any injection.
+Replace the example inputs with existing directories and Python executables.
+Use a new workspace and a dedicated framework checkout. Preparation copies
+and configures scripts and score/draw inputs without starting experiments.
+It leaves recorded result tables in this repository intact.
 
-**Query folder hygiene.** Interrupted runs leave injected files behind, and a
-contaminated query folder silently changes the baseline: GardensPoint reads
-0.802 with 200 queries and 0.782 with 250. Check counts before trusting a
-baseline.
+Follow [the reproduction guide](docs/PHASE_REPRODUCTION.md) for input layout,
+complete gate schedules, causal controls and optional rescoring. Read
+[the setup notes](docs/SETUP_NOTES.md) before changing injection or GT handling.
+Run evaluations serially: some runners temporarily modify the framework
+loader, and SFU loading writes staged GT files.
 
-**AUC precision.** `patches/demo.py` prints AUC at six decimals. Gate results
-are reported at three, where differences are ~0.05. Experiment 5 needs six —
-its effects span roughly 0.005 in total, and three-decimal rounding collapses
-the data onto about five discrete values.
+## View generation and scoring
 
----
+View synthesis follows the existing GenWarp/ZoeDepth procedure in the
+[generation notebook](view_synthesis/genwarp_view_generation.ipynb). Configure
+the source/output paths and `ELE_OPTIONS`, `RADIUS_OPTIONS` and `azi_deg`
+using the regime table above. Preserve full synthetic-view IDs, source
+mappings and pose metadata. Saved example settings are not the specification
+of every evaluated pool.
 
-## Notes
+Corrected scoring from existing source/synthetic/warp/mask inputs uses
+[`phase3b/scripts/score_pool.py`](phase3b/scripts/score_pool.py). Warp-only images
+and masks must match each synthetic view's recorded pose. Existing prepared
+assets and precomputed scores avoid regenerating views or rescoring for gate
+reproduction; retrieval evaluation still needs images and descriptor extraction.
 
-`results/RESULTS.md` records four ground-truth handling defects found and fixed
-during this work, along with the numbers they affected. They are documented
-rather than quietly corrected so that anyone extending the code knows which
-failure modes to check for — `gt_audit.py` exists for exactly this reason.
+## Scope and attribution
 
-Per-run CSVs are not included. The scripts overwrite their output file on each
-invocation, so the copies on disk did not reliably correspond to the reported
-sweeps. All values are in `RESULTS.md` and regenerate from the scripts.
+The evaluation covers one synthesis backend, three datasets and two
+descriptors. It does not establish transfer to other synthesis methods.
+Offline consistency checks do not replace end-to-end evaluation with the
+original assets, GT, weights and environment.
+
+GenWarp, ZoeDepth, DINOv2, PatchNetVLAD, EigenPlaces and VPR_Tutorial are
+third-party components. See [LICENSE](LICENSE) for this repository and the
+respective upstream projects for their licenses and attribution requirements.

@@ -1,0 +1,336 @@
+{
+  "env": {
+    "python": "/home/newview/miniconda3/envs/vprtutorial/bin/python3",
+    "torch": "2.6.0",
+    "numpy": "1.26.4",
+    "cuda": true,
+    "gpu": "NVIDIA GeForce RTX 3080"
+  },
+  "runs": [
+    {
+      "time": "2026-10-10 02:49:54",
+      "groups": [
+        "random",
+        "weights"
+      ],
+      "device": "cuda",
+      "datasets": "gardenspoint,sfu,stlucia",
+      "argv": [
+        "scripts/build_scores.py",
+        "--groups",
+        "weights,random"
+      ]
+    },
+    {
+      "time": "2026-10-10 02:52:37",
+      "groups": [
+        "dino",
+        "iqa"
+      ],
+      "device": "cpu",
+      "datasets": "gardenspoint,sfu,stlucia",
+      "argv": [
+        "scripts/build_scores.py",
+        "--groups",
+        "iqa,dino",
+        "--device",
+        "cpu"
+      ]
+    },
+    {
+      "time": "2026-10-10 15:21:47",
+      "groups": [
+        "fusion"
+      ],
+      "device": "cuda",
+      "datasets": "gardenspoint,sfu,stlucia",
+      "argv": [
+        "scripts/build_scores.py",
+        "--groups",
+        "fusion"
+      ]
+    },
+    {
+      "time": "2026-10-10 21:46:24",
+      "groups": [
+        "geofix"
+      ],
+      "device": "cuda",
+      "datasets": "gardenspoint,sfu,stlucia",
+      "argv": [
+        "scripts/build_scores.py",
+        "--groups",
+        "geofix"
+      ]
+    }
+  ],
+  "random": {
+    "generator": "numpy.random.default_rng(seed).permutation(400)",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "semantics": "rank per view in CSV row order; lower rank accepted first"
+  },
+  "weights": {
+    "formula": "w*mean_sem_score + (1-w)*mean_geo_score",
+    "w": {
+      "w000": 0.0,
+      "w025": 0.25,
+      "w050": 0.5,
+      "w075": 0.75,
+      "w100": 1.0
+    },
+    "note": "computed from the 4-decimal values stored in the combined_summary CSV; w050 therefore differs from stored mean_combined_score by <= 5e-5"
+  },
+  "inputs": {
+    "gardenspoint": {
+      "combined_csv": "/mnt/sda/hagva-repo/module_a/scores/gardenspoint_400_combined_summary.csv",
+      "sha256": "f8541ef1dea6e4225375eee7530ec6136c73a62de1d57ad0e86f33d47562d8e8",
+      "signal1_csv": "/mnt/sda/hagva-repo/module_a/scores/gardenspoint_400_signal1_summary.csv"
+    },
+    "sfu": {
+      "combined_csv": "/mnt/sda/hagva-repo/module_a/scores/sfu_400_combined_summary.csv",
+      "sha256": "3e830c9916bfba8d5750127c52616f989a5a7526c1eaa727b13f1567d209dc46",
+      "signal1_csv": "/mnt/sda/hagva-repo/module_a/scores/sfu_400_signal1_summary.csv"
+    },
+    "stlucia": {
+      "combined_csv": "/mnt/sda/hagva-repo/module_a/scores/stlucia_400_combined_summary.csv",
+      "sha256": "f155d201ad297584b7c2722038dbb59b34d62e39c15b6654ace219d5cbd9744a",
+      "signal1_csv": "/mnt/sda/hagva-repo/module_a/scores/stlucia_400_signal1_summary.csv"
+    }
+  },
+  "iqa": {
+    "brisque": {
+      "lower_better": true,
+      "metric_opts": {
+        "type": "BRISQUE",
+        "test_y_channel": true
+      }
+    },
+    "niqe": {
+      "lower_better": true,
+      "metric_opts": {
+        "type": "NIQE",
+        "test_y_channel": true
+      }
+    },
+    "clipiqa": {
+      "lower_better": false,
+      "metric_opts": {
+        "type": "CLIPIQA"
+      }
+    },
+    "pyiqa_version": "0.1.15.post2",
+    "note": "clipiqa_neg = -clipiqa so that lower = better for all IQA columns; brisque/niqe already lower=better",
+    "input": "synthesized view, RGB in [0,1], native resolution, no resize"
+  },
+  "dino_global": {
+    "model": "facebookresearch/dinov2 dinov2_vits14 (torch.hub)",
+    "hub_commit": "85a24602099d397264d5b30461ad7f3bfd726ca1",
+    "weights_file": "/home/newview/.cache/torch/hub/checkpoints/dinov2_vits14_pretrain.pth",
+    "weights_sha256": "b938bf1bc15cd2ec0feacfe3a1bb553fe8ea9ca46a7e1d8d00217f29aef60cd9",
+    "input": "448x448 bicubic resize, ImageNet mean/std norm; CLS token; score = 1 - cosine(source, synth)",
+    "source_image": "/mnt/sda/Zawad/genwarp/<ds>_400/<source_file from signal1 csv>"
+  },
+  "fusion": {
+    "definitions": {
+      "zavg": "(z(g) + z(s))/2, z = (x - mean)/std within the dataset (numpy std, ddof=0)",
+      "rankavg": "(rank(g) + rank(s))/2, 0-based ranks over the 400 views, ties -> average rank (scipy rankdata 'average' - 1)",
+      "prod": "g * s",
+      "maxgs": "max(g, s)",
+      "sem_veto50": "s if g <= P50(g) else s + 10   (numpy.percentile, linear)",
+      "sem_veto75": "s if g <= P75(g) else s + 10",
+      "sem_veto90": "s if g <= P90(g) else s + 10",
+      "geo_veto75": "g if s <= P75(s) else g + 10   (symmetric control)"
+    },
+    "inputs": "4-decimal mean_geo_score (g) and mean_sem_score (s) from the combined_summary CSV; lower = accepted first",
+    "per_dataset": {
+      "gardenspoint": {
+        "percentiles": {
+          "P50(g)": 0.49175,
+          "P75(g)": 0.512575,
+          "P90(g)": 0.5302,
+          "P75(s)": 0.4391
+        },
+        "unvetoed_counts": {
+          "sem_veto50": 200,
+          "sem_veto75": 300,
+          "sem_veto90": 361,
+          "geo_veto75": 300
+        },
+        "mean_std": {
+          "g": [
+            0.4927955,
+            0.02872380597605408
+          ],
+          "s": [
+            0.40820324999999996,
+            0.04712924956369983
+          ]
+        }
+      },
+      "sfu": {
+        "percentiles": {
+          "P50(g)": 0.5487,
+          "P75(g)": 0.5702,
+          "P90(g)": 0.58606,
+          "P75(s)": 0.415475
+        },
+        "unvetoed_counts": {
+          "sem_veto50": 201,
+          "sem_veto75": 300,
+          "sem_veto90": 360,
+          "geo_veto75": 300
+        },
+        "mean_std": {
+          "g": [
+            0.55025225,
+            0.02761806193304483
+          ],
+          "s": [
+            0.38623025,
+            0.053902139196301845
+          ]
+        }
+      },
+      "stlucia": {
+        "percentiles": {
+          "P50(g)": 0.41464999999999996,
+          "P75(g)": 0.43584999999999996,
+          "P90(g)": 0.45472,
+          "P75(s)": 0.41795
+        },
+        "unvetoed_counts": {
+          "sem_veto50": 200,
+          "sem_veto75": 300,
+          "sem_veto90": 360,
+          "geo_veto75": 300
+        },
+        "mean_std": {
+          "g": [
+            0.41597875,
+            0.029366896728076325
+          ],
+          "s": [
+            0.39219075000000003,
+            0.03848337354543518
+          ]
+        }
+      }
+    }
+  },
+  "geofix": {
+    "definitions": {
+      "geo_fixed": "mean_geo_score recomputed by phase2/scripts/recompute_geo.py (Module A formula, regenerated warp/mask resized to synth size)",
+      "wXXXf": "w*mean_sem_score + (1-w)*geo_fixed",
+      "<rule>f": "Phase-1b fusion rule with g = geo_fixed"
+    },
+    "per_dataset": {
+      "gardenspoint": {
+        "percentiles": {
+          "P50(g)": 0.25295,
+          "P75(g)": 0.28354999999999997,
+          "P90(g)": 0.31564,
+          "P75(s)": 0.4391
+        },
+        "unvetoed_counts": {
+          "sem_veto50f": 200,
+          "sem_veto75f": 300,
+          "sem_veto90f": 360,
+          "geo_veto75f": 300
+        }
+      },
+      "sfu": {
+        "percentiles": {
+          "P50(g)": 0.2311,
+          "P75(g)": 0.25295,
+          "P90(g)": 0.26973,
+          "P75(s)": 0.415475
+        },
+        "unvetoed_counts": {
+          "sem_veto50f": 200,
+          "sem_veto75f": 300,
+          "sem_veto90f": 360,
+          "geo_veto75f": 300
+        }
+      },
+      "stlucia": {
+        "percentiles": {
+          "P50(g)": 0.22975,
+          "P75(g)": 0.25617500000000004,
+          "P90(g)": 0.27512000000000003,
+          "P75(s)": 0.41795
+        },
+        "unvetoed_counts": {
+          "sem_veto50f": 200,
+          "sem_veto75f": 300,
+          "sem_veto90f": 360,
+          "geo_veto75f": 300
+        }
+      }
+    },
+    "geo_fixed_recomputation": {
+      "script": "/mnt/sda/HAGVA_R2/phase2/scripts/recompute_geo.py",
+      "formula": "Module A cell-2 compute_geometric_score verbatim: score=1 in holes (mask<0.5); visible: clip(|synth-warped|.mean(ch)/p99(visible diff),0,1); mean_geo = score_map.mean() written to 4 dp",
+      "inputs": "warp-only render and mask regenerated by Zawad (Exp-4-prep code path, GenWarp 512x512 output RESIZED to the synthesized size: BILINEAR image, NEAREST mask) from /home/newview/genwarp/<pool>_400_warp_only and <pool>_400_warp_masks (2026-10-10)",
+      "root_cause": "/mnt/sda/HAGVA_R2/phase2/mask_root_cause.md (Module A cropped the 512x512 GenWarp output instead of resizing: dead band of holes in columns >=512 on every view, warped image misaligned)",
+      "mask_audits": {
+        "gardenspoint": "/mnt/sda/HAGVA_R2/phase2/mask_audit_400.csv",
+        "sfu": "/mnt/sda/HAGVA_R2/phase2/mask_audit_sfu400.csv",
+        "stlucia": "/mnt/sda/HAGVA_R2/phase2/mask_audit_stl400.csv"
+      },
+      "recorded": "2026-10-11 02:46:01",
+      "per_dataset": {
+        "gardenspoint": {
+          "geo_fixed_csv": "/mnt/sda/HAGVA_R2/phase1/scores/gardenspoint_400_geo_fixed.csv",
+          "warp_only_dir": "/home/newview/genwarp/garden_400_warp_only",
+          "mask_dir": "/home/newview/genwarp/garden_400_warp_masks",
+          "n": 400,
+          "old_mean": 0.4928,
+          "old_sd": 0.0288,
+          "fixed_mean": 0.2553,
+          "fixed_sd": 0.0423,
+          "spearman_old_fixed": 0.5967,
+          "pearson_old_fixed": 0.6042,
+          "deadband_frac_old": 0.2,
+          "holefrac_old_mean": 0.2637,
+          "holefrac_fixed_mean": 0.1065
+        },
+        "sfu": {
+          "geo_fixed_csv": "/mnt/sda/HAGVA_R2/phase1/scores/sfu_400_geo_fixed.csv",
+          "warp_only_dir": "/home/newview/genwarp/sfu_400_warp_only",
+          "mask_dir": "/home/newview/genwarp/sfu_400_warp_masks",
+          "n": 400,
+          "old_mean": 0.5503,
+          "old_sd": 0.0277,
+          "fixed_mean": 0.2304,
+          "fixed_sd": 0.0294,
+          "spearman_old_fixed": 0.5891,
+          "pearson_old_fixed": 0.6055,
+          "deadband_frac_old": 0.3191,
+          "holefrac_old_mean": 0.3875,
+          "holefrac_fixed_mean": 0.0868
+        },
+        "stlucia": {
+          "geo_fixed_csv": "/mnt/sda/HAGVA_R2/phase1/scores/stlucia_400_geo_fixed.csv",
+          "warp_only_dir": "/home/newview/genwarp/st_400_warp_only",
+          "mask_dir": "/home/newview/genwarp/st_400_warp_masks",
+          "n": 400,
+          "old_mean": 0.416,
+          "old_sd": 0.0294,
+          "fixed_mean": 0.2315,
+          "fixed_sd": 0.0324,
+          "spearman_old_fixed": 0.7457,
+          "pearson_old_fixed": 0.7561,
+          "deadband_frac_old": 0.2,
+          "holefrac_old_mean": 0.2496,
+          "holefrac_fixed_mean": 0.0666
+        }
+      }
+    }
+  }
+}

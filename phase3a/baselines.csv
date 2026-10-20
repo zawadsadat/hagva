@@ -1,0 +1,19 @@
+descriptor,dataset,auc,rc,seconds,loader_before,loader_after
+AlexNet,GardensPoint,0.195,0,13,0/0,0/0
+AlexNet,SFU,0.320,0,16,0/0,0/0
+AlexNet,StLucia,0.459,0,12,0/0,0/0
+SAD,GardensPoint,0.030,0,6,0/0,0/0
+SAD,SFU,0.149,0,9,0/0,0/0
+SAD,StLucia,0.186,0,6,0/0,0/0
+CosPlace,GardensPoint,0.593,0,13,0/0,0/0
+CosPlace,SFU,0.489,0,14,0/0,0/0
+CosPlace,StLucia,0.766,0,9,0/0,0/0
+EigenPlaces,GardensPoint,0.675,0,13,0/0,0/0
+EigenPlaces,SFU,0.746,0,15,0/0,0/0
+EigenPlaces,StLucia,0.736,0,9,0/0,0/0
+HDC-DELF,GardensPoint,ERROR,1,10,0/0,0/0
+HDC-DELF,SFU,ERROR,1,9,0/0,0/0
+HDC-DELF,StLucia,ERROR,1,7,0/0,0/0
+HDC-DELF (CPU),SFU,0.522,0,61,0/0,0/0
+HDC-DELF (CPU),StLucia,0.474,0,31,0/0,0/0
+HDC-DELF (CPU),GardensPoint,0.742,0,39,0/0,0/0

@@ -1,0 +1,56 @@
+{
+  "built": "2026-10-11 20:59:34",
+  "helper": "phase1/scripts/build_scores.py (WEIGHTS, add_random, add_iqa)",
+  "per_dataset": {
+    "gardenspoint": {
+      "brisque": {
+        "lower_better": true,
+        "metric_opts": {
+          "type": "BRISQUE",
+          "test_y_channel": true
+        }
+      },
+      "niqe": {
+        "lower_better": true,
+        "metric_opts": {
+          "type": "NIQE",
+          "test_y_channel": true
+        }
+      },
+      "clipiqa": {
+        "lower_better": false,
+        "metric_opts": {
+          "type": "CLIPIQA"
+        }
+      },
+      "pyiqa_version": "0.1.15.post2",
+      "note": "clipiqa_neg = -clipiqa so that lower = better for all IQA columns; brisque/niqe already lower=better",
+      "input": "synthesized view, RGB in [0,1], native resolution, no resize"
+    },
+    "sfu": {
+      "brisque": {
+        "lower_better": true,
+        "metric_opts": {
+          "type": "BRISQUE",
+          "test_y_channel": true
+        }
+      },
+      "niqe": {
+        "lower_better": true,
+        "metric_opts": {
+          "type": "NIQE",
+          "test_y_channel": true
+        }
+      },
+      "clipiqa": {
+        "lower_better": false,
+        "metric_opts": {
+          "type": "CLIPIQA"
+        }
+      },
+      "pyiqa_version": "0.1.15.post2",
+      "note": "clipiqa_neg = -clipiqa so that lower = better for all IQA columns; brisque/niqe already lower=better",
+      "input": "synthesized view, RGB in [0,1], native resolution, no resize"
+    }
+  }
+}

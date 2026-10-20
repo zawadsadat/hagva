@@ -39,9 +39,9 @@ def main():
         description='Visual Place Recognition: A Tutorial. Code repository supplementing our paper.'
     )
     parser.add_argument(
-        '--descriptor', type=str, default='HDC-DELF',
+        '--descriptor', type=str, default=os.environ.get('HAGVA_DESCRIPTOR', 'HDC-DELF'),
         choices=['HDC-DELF', 'AlexNet', 'NetVLAD', 'PatchNetVLAD', 'CosPlace', 'EigenPlaces', 'SAD'],
-        help='Select descriptor (default: HDC-DELF)'
+        help='Select descriptor (default: HAGVA_DESCRIPTOR or HDC-DELF)'
     )
     parser.add_argument(
         '--dataset', type=str, default='GardensPoint',
@@ -140,6 +140,10 @@ def main():
         print('===== Compute query set descriptors')
         q_D_holistic, q_D_patches = feature_extractor.compute_features(imgs_q)
         S = feature_extractor.local_matcher_from_numpy_single_scale(q_D_patches, db_D_patches)
+
+    if os.environ.get("HAGVA_SAVE_S"):
+        np.save(os.path.join(out_dir, "S.npy"), S)
+        print(f"Saved: {os.path.join(out_dir, 'S.npy')}  shape={S.shape}")
 
     # similarity matrix
     fig = plt.figure()

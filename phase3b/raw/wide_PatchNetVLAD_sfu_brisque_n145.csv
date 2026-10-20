@@ -1,0 +1,2 @@
+threshold,n_passed,n_rejected,auc,delta_from_baseline,delta_from_naive
+42.1270751953125,145,255,0.737,0.008000000000000007,0.11299999999999999

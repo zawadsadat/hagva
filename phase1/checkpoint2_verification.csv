@@ -1,0 +1,2 @@
+dataset,method,n_requested,n_passed,tau,auc,baseline,naive,note
+SFU,mean_combined_score,20,20,0.42225,0.731,0.729,0.651,verification of anchor SFU comb n=20 using the stored combined column (w050 ties at 20th/21st -> 19 pass)

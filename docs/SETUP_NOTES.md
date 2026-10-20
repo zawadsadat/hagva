@@ -1,61 +1,94 @@
-# What this repo contains, and what it does not
+# Setup and ground-truth notes
 
-## Contains
-- view_synthesis/ : GenWarp + ZoeDepth novel view generation (run first)
-- module_a/   : Signal 1 (geometric) + Signal 2 (DINOv2 semantic) scoring notebook
-- module_a/scores/ : precomputed per-view scores; lets you reproduce every
-                gate/ablation/Exp5 result WITHOUT running GenWarp or DINOv2
-- gate/       : 400-view threshold-sweep evaluation, one script per dataset
-- exp5/       : per-image single-view injection correlation
-- ablation/   : signal ablation, NetVLAD descriptor ablation, threshold-rule studies
-- patches/    : MODIFIED demo.py and datasets/load_dataset.py from the VPR tutorial
-                framework. These are required — stock versions will not work.
-- tools/      : gt_audit.py verifies every query column has ground truth after
-                injection. Run it whenever an injection path changes.
-- results/    : RESULTS.md with all reported numbers (per-run CSVs removed;
-                see note at the end of RESULTS.md)
+Start with [README](../README.md) and the
+[Phase 1–3b reproduction guide](PHASE_REPRODUCTION.md). This package retains
+the phase scripts, measured results and required input scores.
 
-## Not contained (user must supply)
-- VPR tutorial framework (github.com/stschubert/VPR_Tutorial), with patches/ applied
-- Datasets: GardensPoint, SFU, StLucia_small
-- GenWarp + ZoeDepth for view synthesis
-- Synthesized view folders (garden_400_out_low, sfu_400_out_low, st_400_out_low
-  and the 50-view equivalents)
-- conda env with patchnetvlad, torch, DINOv2 via torch.hub
+## Framework patches
 
-## Paths
-Every script has an absolute-path config block at the top pointing at
-/mnt/sda/Zawad/genwarp/... These must be edited for any other machine.
+Apply `patches/demo.py` as the framework's `demo.py` and
+`patches/load_dataset.py` as `datasets/load_dataset.py` in a dedicated scratch
+framework checkout. The patches support `--images_dir`, the inherited-query
+GT logic and EigenPlaces. `HAGVA_DESCRIPTOR` supplies the default descriptor;
+an explicit `--descriptor` takes precedence. `HAGVA_SAVE_S=1` saves raw
+reference-by-query similarity values as `S.npy` in the requested output
+directory, before the visualization normalization.
 
-## Ground-truth handling — read before modifying anything
-Injected synthetic views need (a) filenames that sort AFTER all original
-queries, and (b) an explicit ground-truth column copied from their source
-image. Getting either wrong produces plausible but wrong AUC values.
+The patched demo prints AUC with **three** decimal places. Existing phase
+baseline guards compare those formatted values, so increasing precision
+requires updating the parsers/guards together. Stored phase AUCs retain their
+recorded precision.
 
-Three distinct mechanisms are in use:
-  GardensPoint : runtime patch writing extra_query_gt[idx] = ref_idx into
-                 load_dataset.py; injected files named Image200.jpg onward
-  SFU          : runtime patch writing copy_from['<injected>'] = '<source>'
-  StLucia      : explicit GT matrix extension written to the staging dir
-                 (write_gt), injected files named zzz_inject_NNNN.jpg
+## Query ordering and inherited labels
 
-The StLucia approach is the only one that does not modify the framework at
-runtime and is the pattern to standardise on in future work.
+Synthetic views are appended to the **query** set and inherit the GT column
+of their source image. They do not have independent target-view labels.
+Original query ordering must remain consistent with GT column ordering.
+An injected filename that sorts before the originals silently shifts the
+association. An all-zero added column makes an injected view unmatchable.
 
-Always run tools/gt_audit.py against a staged, injected dataset after changing
-an injection path. Compare all-zero column counts against the ORIGINAL GT —
-StLucia legitimately has 35 empty columns before any injection.
+| Dataset | Evaluated mechanism | Injected filename |
+|---|---|---|
+| GardensPoint | Runtime additions to `extra_query_gt` before the loader's basename loop | `Image200.jpg` onward |
+| SFU | Runtime additions to `copy_from` before GT resizing | `z_hagva_tmp_*` |
+| StLucia | Explicit hard/soft GT extension in staging | `zzz_inject_NNNN.jpg` |
 
-## module_a/VPR.ipynb cell map
-The notebook accumulated across the project and contains per-dataset duplicates.
-Config paths in each cell reflect whichever dataset was run last; edit them.
+The loader contains legacy static mappings that were present in the evaluated
+version. It also contains exact insertion anchors used by the runners.
+Changing those mappings or anchors can alter GT or break patch insertion.
+The supplied loader is the version used for the recorded experiments.
 
-  cell 0-1   : imports, model loading (ZoeDepth, GenWarp, DINOv2)
-  cell 2-4   : Signal 1 / Signal 2 / Combined  (paths last set to StLucia 50-view)
+## Staging and serial execution
 
-To regenerate scores for a dataset, use the cell 2-4 trio and set
-synthesized_dir, source_dir, and the three output dirs under
-hagva_module_a/<name>/. The 400-view scores in module_a/scores/ were produced
-this way with synthesized_dir pointed at garden_400_out_low / sfu_400_out_low /
-st_400_out_low.
+GP/SFU runners temporarily rewrite the framework loader and attempt cleanup
+after evaluation. An interrupted process can leave injected patch lines.
+Run serially on a disposable framework copy; inspect the loader after an
+interruption before restarting. Isolation of scratch directories does not
+make simultaneous runs against one loader safe.
 
+The SFU loader backs up and rewrites `GT.npz` during loading. Staging must use
+a copied, writable GT file, not a symlink to an original GT. The runners
+restore it from `VPR-Query-NEW/images/SFU/GT_original.npz`. Keep that baseline
+backup intact. The GT audit invokes the loader too, so audit staged data.
+
+GardensPoint's baseline uses 200 original queries; SFU staging uses the first
+385 original query JPEGs. Source pool folders also require their original
+`selected_images.txt` mappings. Framework image folders must contain the
+expected original images. A contaminated query directory can change AUC
+without a clear error.
+
+`tools/gt_audit.py` checks the staged query GT without descriptor extraction:
+
+```bash
+python3 tools/gt_audit.py <framework_dir> StLuciaDataset <staged_images_root>
+```
+
+For StLucia, `<staged_images_root>` is the staged `StLucia_small/` directory
+containing `180809_1545/`, `100909_0845/` and `GT.npz`; the causal
+runner's `--audit` option supplies the appropriate dataset path automatically.
+Compare empty-column counts with the original GT, rather than requiring
+zero: the original StLucia data legitimately has 35 empty columns.
+
+Treat this legacy helper as a diagnostic, not an independent inheritance
+certificate. It reads its `original_all_zero` comparator from staged GT after
+loading, when that file may already be extended or rewritten. Its `STATUS`
+does not prove that each injected column equals its source column. A strict
+audit must compare against an untouched baseline and the injection mapping.
+
+## Scoring entry points
+
+Semantic drift and corrected geometry are implemented in
+`phase3b/scripts/score_pool.py`. Geometry uses spatially aligned inputs; a
+512-pixel render must not be cropped onto a larger source canvas.
+
+Use `phase3b/scripts/score_pool.py` on existing source/synthetic/warp/mask
+assets. It computes DINOv2 patch-level semantic drift and geometry
+(bilinear warp resizing, nearest-neighbor mask resizing). Use the exact
+synthetic view ID to associate assets. Low-pool geometry diagnostics are in
+`phase2/scripts/recompute_geo.py`, which also needs the historical stored
+Module A masks. `phase1/scripts/build_scores.py --groups geofix` adds corrected
+columns. This builder also contains the Phase 1b fusion rules.
+
+The main selection column is `w100` (semantic drift). Corrected geometry
+`w000f` and equal fusion `w050f` are comparison methods. Unsuffixed geometry
+columns and the notebook's combined-score exports are historical.

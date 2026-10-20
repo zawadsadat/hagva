@@ -1,0 +1,38 @@
+{
+  "built": "2026-10-17 04:26:42",
+  "helper": "phase1/scripts/build_scores.py (WEIGHTS, add_random, add_iqa)",
+  "per_dataset": {
+    "stlucia": {
+      "brisque": {
+        "lower_better": true,
+        "metric_opts": {
+          "type": "BRISQUE",
+          "test_y_channel": true
+        }
+      },
+      "niqe": {
+        "lower_better": true,
+        "metric_opts": {
+          "type": "NIQE",
+          "test_y_channel": true
+        }
+      },
+      "clipiqa": {
+        "lower_better": false,
+        "metric_opts": {
+          "type": "CLIPIQA"
+        }
+      },
+      "pyiqa_version": "0.1.15.post2",
+      "note": "clipiqa_neg = -clipiqa so that lower = better for all IQA columns; brisque/niqe already lower=better",
+      "input": "synthesized view, RGB in [0,1], native resolution, no resize"
+    }
+  },
+  "inputs_note": "st_wide_ref400_warp_masks/ and st_wide_ref400_warp_only/ (under /home/newview/genwarp) are the QUERY-SIDE StLucia wide pool's regenerated masks and warp-only renders (stems identical to st_400_out_wide, 400/400 filename match); they were misnamed at generation (the garden/sfu equivalents are <pool>_wide_400_warp_*). They are not the reference-side pool (st_ref400*).",
+  "inputs": {
+    "synth": "/home/newview/genwarp/st_400_out_wide",
+    "source": "/mnt/sda/Zawad/genwarp/st_400 (byte-identical to /home/newview/genwarp/st_400)",
+    "warp_only": "/home/newview/genwarp/st_wide_ref400_warp_only",
+    "masks": "/home/newview/genwarp/st_wide_ref400_warp_masks"
+  }
+}
